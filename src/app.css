@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/* 다크 변형 정의 — `.dark` 클래스가 붙은 요소(또는 그 안쪽)에서 dark: 유틸리티 활성화 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html, body, #svelte {
+  height: 100%;
+}
+
+html {
+  background-color: white;
+  color: rgb(15 23 42); /* slate-900 */
+}
+
+html.dark {
+  background-color: rgb(15 23 42); /* slate-900 */
+  color: rgb(226 232 240); /* slate-200 */
+}

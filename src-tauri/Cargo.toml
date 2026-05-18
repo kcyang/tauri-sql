@@ -1,0 +1,52 @@
+[package]
+name = "tauri-sql"
+version = "0.1.0"
+description = "MSSQL Query Tool"
+authors = ["kcyang"]
+edition = "2021"
+
+[lib]
+name = "tauri_sql_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+
+# 비동기 런타임
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures-util = "0.3"
+async-trait = "0.1"
+
+# MSSQL — bb8-tiberius default features 가 tiberius/winauth 를 켜기 때문에 macOS에서 빌드 실패. 명시적 features 만 사용.
+tiberius = { version = "0.12", default-features = false, features = ["tds73", "rustls", "chrono", "rust_decimal"] }
+bb8 = "0.9"
+bb8-tiberius = { version = "0.16", default-features = false, features = ["chrono", "tds73", "with-tokio", "tls"] }
+
+# 직렬화/에러
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# 도메인 — keyring v4 는 init 시 use_native_store() 호출 필요. Error/Entry 타입은 keyring-core 에서 직접 가져온다.
+keyring = "4"
+keyring-core = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1", features = ["serde-str"] }
+base64 = "0.22"
+regex = "1"
+once_cell = "1"
+parking_lot = "0.12"
+rust_xlsxwriter = "0.95"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
