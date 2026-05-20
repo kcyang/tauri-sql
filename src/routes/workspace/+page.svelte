@@ -233,11 +233,12 @@
     if (!active) return;
     const tabId = active.id;
     const snapshot = active.sql;
+    const filePath = active.filePath;
     try {
-      if (!saveAs && active.filePath) {
+      if (!saveAs && filePath) {
         const { invoke } = await import("$lib/api/invoke");
         await invoke<void>("write_text_file", {
-          path: active.filePath,
+          path: filePath,
           content: snapshot,
         });
         queryTabs.updateTab(tabId, { savedContent: snapshot });
@@ -245,7 +246,7 @@
       }
       const newPath = await filesApi.saveSqlFile(
         snapshot,
-        active.filePath ?? undefined,
+        filePath ?? undefined,
       );
       if (newPath) {
         queryTabs.updateTab(tabId, {
