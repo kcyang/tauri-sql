@@ -12,7 +12,7 @@
   import { filesApi } from "$lib/api/files";
   import { sessionStore } from "$lib/stores/session.svelte";
   import { themeStore } from "$lib/stores/theme.svelte";
-  import { queryTabs, isDirty } from "$lib/stores/queryTabs.svelte";
+  import { queryTabs } from "$lib/stores/queryTabs.svelte";
   import { errorMessage } from "$lib/types";
   import QueryEditor from "$lib/components/QueryEditor.svelte";
   import ResultGrid from "$lib/components/ResultGrid.svelte";
@@ -199,7 +199,8 @@
       if (!file) return;
       // 활성 탭이 빈 드래프트면 재사용, 아니면 새 탭으로
       const a = queryTabs.active;
-      const reuse = a && a.filePath === null && a.sql === "";
+      const reuse =
+        a && a.filePath === null && a.sql === "" && !a.result && !a.busy;
       if (reuse && a) {
         queryTabs.updateTab(a.id, {
           sql: file.content,
@@ -231,24 +232,25 @@
   async function saveFile(saveAs: boolean) {
     if (!active) return;
     const tabId = active.id;
+    const snapshot = active.sql;
     try {
       if (!saveAs && active.filePath) {
         const { invoke } = await import("$lib/api/invoke");
         await invoke<void>("write_text_file", {
           path: active.filePath,
-          content: active.sql,
+          content: snapshot,
         });
-        queryTabs.updateTab(tabId, { savedContent: active.sql });
+        queryTabs.updateTab(tabId, { savedContent: snapshot });
         return;
       }
       const newPath = await filesApi.saveSqlFile(
-        active.sql,
+        snapshot,
         active.filePath ?? undefined,
       );
       if (newPath) {
         queryTabs.updateTab(tabId, {
           filePath: newPath,
-          savedContent: active.sql,
+          savedContent: snapshot,
           title: basename(newPath),
         });
       }
@@ -265,7 +267,6 @@
     queryTabs.updateTab(tabId, { exporting: true });
     try {
       await filesApi.exportResultToXlsx(active.result);
-      queryTabs.updateTab(tabId, { runError: null });
     } catch (e) {
       queryTabs.updateTab(tabId, {
         runError: `Excel 저장 실패: ${errorMessage(e)}`,
