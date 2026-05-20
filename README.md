@@ -1,4 +1,4 @@
-# tauri-sql
+# just-sql
 
 macOS 에서 가볍게 쓰는 MSSQL 쿼리/탐색 데스크톱 도구.
 Tauri 2 + SvelteKit (Svelte 5) + Rust(tiberius) 기반.
@@ -6,7 +6,7 @@ Tauri 2 + SvelteKit (Svelte 5) + Rust(tiberius) 기반.
 ## 주요 기능
 
 ### 연결 관리
-- 다중 연결 프로필 저장 (`~/Library/Application Support/com.kcyang.tauri-sql/profiles.json`)
+- 다중 연결 프로필 저장 (`~/Library/Application Support/com.kcyang.just-sql/profiles.json`)
 - **비밀번호는 macOS Keychain** 에 분리 저장 (keyring v4)
 - 연결 테스트 / 프로필 편집 / 삭제
 

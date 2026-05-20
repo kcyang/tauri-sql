@@ -58,7 +58,7 @@
   <header class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
     <div class="max-w-3xl mx-auto flex items-center justify-between">
       <h1 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Tauri SQL — 연결 관리
+        just-sql — 연결 관리
       </h1>
       <div class="flex items-center gap-2">
         <ThemeToggle />

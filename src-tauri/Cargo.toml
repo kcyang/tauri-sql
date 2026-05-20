@@ -1,12 +1,12 @@
 [package]
-name = "tauri-sql"
+name = "just-sql"
 version = "0.1.0"
 description = "MSSQL Query Tool"
 authors = ["kcyang"]
 edition = "2021"
 
 [lib]
-name = "tauri_sql_lib"
+name = "just_sql_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -131,7 +131,7 @@ export const queryTabs = new QueryTabsStore();
 ### 6.2 ObjectExplorerPane 디자인
 
 - 폭 상태: `let width = $state(readLocal() ?? 256)`
-- localStorage key: `tauri-sql:explorer-width`
+- localStorage key: `just-sql:explorer-width`
 - 드래그 핸들: 우측 `w-1.5 cursor-col-resize`, 호버/드래그 중 색 강조 (기존 row splitter 와 같은 톤)
 - 드래그 중 클램프: `[180, 600]`
 - 마우스 up 에서 `localStorage.setItem(...)` (mousemove 마다 X)

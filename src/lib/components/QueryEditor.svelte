@@ -17,6 +17,8 @@
     dark: boolean;
     /** 현재 선택된 텍스트 — 선택 영역이 비어 있으면 빈 문자열. 부모가 bind 해서 사용 */
     selectedText?: string;
+    /** selection 변경을 받는 콜백 (bind 대신 쓸 때) */
+    onSelectionChange?: (text: string) => void;
     onChange: (value: string) => void;
     onRun?: () => void;
   };
@@ -24,6 +26,7 @@
     value,
     dark,
     selectedText = $bindable(""),
+    onSelectionChange,
     onChange,
     onRun,
   }: Props = $props();
@@ -75,12 +78,11 @@
         }
         if (update.selectionSet || update.docChanged) {
           const main = update.state.selection.main;
-          if (main.empty) {
-            if (selectedText !== "") selectedText = "";
-          } else {
-            const text = update.state.doc.sliceString(main.from, main.to);
-            if (selectedText !== text) selectedText = text;
-          }
+          const text = main.empty
+            ? ""
+            : update.state.doc.sliceString(main.from, main.to);
+          if (selectedText !== text) selectedText = text;
+          onSelectionChange?.(text);
         }
       }),
       EditorView.theme(

@@ -1,7 +1,7 @@
 //! 연결 프로필 영구 저장 + 비밀번호 keyring 연동.
 //!
 //! - 프로필 JSON: `<app_data_dir>/profiles.json`
-//! - 비밀번호: keyring (`service="tauri-sql"`, `account=<profile.id>`)
+//! - 비밀번호: keyring (`service="just-sql"`, `account=<profile.id>`)
 //!
 //! 동시 접근 보호: `parking_lot::Mutex` 로 파일 I/O 직렬화.
 
@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-const KEYRING_SERVICE: &str = "tauri-sql";
+const KEYRING_SERVICE: &str = "just-sql";
 
 /// 프로필 저장소. Tauri State 로 등록.
 pub struct ProfileRepository {
