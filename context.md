@@ -32,6 +32,7 @@ Tauri 2 + SvelteKit (Svelte 5) + Rust(tiberius). **최우선 가치: 안정성**
 - [x] 후속2: 그리드 행/셀 ⌘C 복사, Excel 내보내기
 - [x] 후속3: 실행 중 오버레이, 선택 영역만 실행
 - [x] 후속4: 시스템 DB 숨김, graceful 종료, 아이콘 등록
+- [x] 후속5: 다중 쿼리 탭(독립 실행), Object Explorer 폭 드래그(localStorage 저장)
 
 ## tiberius 핵심 API (context7 조회)
 - `Config::from_ado_string("server=tcp:host,port;database=db;user id=u;password=p;TrustServerCertificate=true")`
@@ -61,9 +62,12 @@ Tauri 2 + SvelteKit (Svelte 5) + Rust(tiberius). **최우선 가치: 안정성**
 7. `WAITFOR DELAY '00:00:10'` 후 ⌘. 또는 오버레이 취소
 8. 결과 → Excel 저장 → .xlsx 열어서 타입 확인
 9. 앱 X 닫기 → 콘솔에 `[shutdown] ... 정리: 1건` 로그
+10. ⌘T 로 탭 2개 만들고 한쪽 `WAITFOR DELAY '00:00:05'` 실행 → 즉시 다른 탭으로 전환 → 빠른 쿼리 실행 → 두 결과가 각각 표시
+11. dirty 탭 ⌘W → 확인 다이얼로그 → 취소/닫기 동작
+12. 마지막 탭 ⌘W → 빈 새 탭 자동 생성
+13. Object Explorer 핸들 좌우 드래그 → 180/600 한계 클램프, 재시작 후 폭 유지
 
 ## 향후 확장 (V2)
-- 다중 쿼리 탭
 - 결과 스트리밍 IPC
 - 다중 결과셋 표시
 - 컬럼 필터/검색 강화
