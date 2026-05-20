@@ -1,4 +1,4 @@
-//! Tauri SQL — MSSQL 쿼리/탐색 데스크톱 앱.
+//! just-sql — MSSQL 쿼리/탐색 데스크톱 앱.
 
 mod commands;
 mod connection;

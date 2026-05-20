@@ -1,5 +1,5 @@
 {
-  "name": "tauri-sql",
+  "name": "just-sql",
   "version": "0.1.0",
   "description": "MSSQL 쿼리/탐색을 위한 Tauri 데스크톱 앱",
   "type": "module",

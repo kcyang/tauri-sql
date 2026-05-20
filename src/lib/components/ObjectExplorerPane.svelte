@@ -8,7 +8,7 @@
   };
   let { sessionId, onObjectActivate }: Props = $props();
 
-  const STORAGE_KEY = "tauri-sql:explorer-width";
+  const STORAGE_KEY = "just-sql:explorer-width";
   const MIN_W = 180;
   const MAX_W = 600;
   const DEFAULT_W = 256;

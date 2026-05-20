@@ -18,7 +18,7 @@
   let username = $state(untrack(() => profile?.username ?? ""));
   let password = $state("");
   let trustCert = $state(untrack(() => profile?.trust_server_certificate ?? true));
-  let appName = $state(untrack(() => profile?.application_name ?? "tauri-sql"));
+  let appName = $state(untrack(() => profile?.application_name ?? "just-sql"));
 
   let busy = $state(false);
   let testMessage = $state<{ ok: boolean; text: string } | null>(null);

@@ -1,4 +1,4 @@
-# tauri-sql — 컨텍스트
+# just-sql — 컨텍스트
 
 ## 프로젝트 요약
 macOS 에서 가볍게 쓰는 MSSQL 쿼리/탐색 도구.
