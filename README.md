@@ -11,9 +11,14 @@ Tauri 2 + SvelteKit (Svelte 5) + Rust(tiberius) 기반.
 - 연결 테스트 / 프로필 편집 / 삭제
 
 ### 워크스페이스
-- **오브젝트 익스플로러** (좌측): DB / 테이블 / 뷰 / 저장 프로시저를 lazy 로드로 탐색
+- **다중 쿼리 탭**
+  - `⌘T` 로 새 탭, `⌘W` 로 닫기 (수정사항 있으면 확인 다이얼로그)
+  - 탭별 독립 실행 — 한 탭에서 긴 쿼리가 도는 동안 다른 탭에서 별도 쿼리 가능
+  - 탭 제목 **더블클릭** (또는 F2) 으로 이름 변경 (파일 기반 탭도 제목만 변경)
+- **오브젝트 익스플로러** (좌측, **폭 드래그 조절** + 재시작 후 폭 유지)
+  - DB / 테이블 / 뷰 / 저장 프로시저를 lazy 로드로 탐색
   - 시스템 DB (`master`/`msdb`/`tempdb`) 는 자동 숨김
-  - 객체 더블클릭 → 새 쿼리 탭에 `SELECT TOP 100 * FROM ...` 또는 `EXEC ...` 템플릿 삽입
+  - 객체 더블클릭 → 활성 탭에 `SELECT TOP 100 * FROM ...` 또는 `EXEC ...` 템플릿 삽입
 - **SQL 에디터** (CodeMirror 6 + lang-sql)
   - 키워드 색상 강조 (라이트/다크 각각 8색 팔레트)
   - 줄번호, 자동 들여쓰기, 괄호 매칭, undo/redo
@@ -48,6 +53,9 @@ Tauri 2 + SvelteKit (Svelte 5) + Rust(tiberius) 기반.
 |---|---|
 | ⌘↵ | 쿼리 실행 (선택 영역 있으면 그 부분만) |
 | ⌘. | 진행 중인 쿼리 취소 |
+| ⌘T | 새 쿼리 탭 |
+| ⌘W | 활성 탭 닫기 (수정사항 있으면 확인) |
+| F2 | 탭 이름 변경 (탭에 포커스 둔 상태에서) |
 | ⌘O | SQL 파일 열기 |
 | ⌘S | 현재 파일에 저장 (없으면 다른 이름으로) |
 | ⇧⌘S | 다른 이름으로 저장 |
@@ -124,12 +132,14 @@ src/                      Svelte 5 + TS 프론트엔드
     workspace/+page.svelte  메인 워크스페이스
   lib/
     api/                  Tauri invoke 타입드 래퍼
-    stores/               session / theme (Svelte 5 runes)
+    stores/               session / theme / queryTabs (Svelte 5 runes)
     components/
       ConnectionList.svelte
       ConnectionForm.svelte
       ObjectExplorer.svelte
+      ObjectExplorerPane.svelte  드래그 리사이즈 래퍼
       QueryEditor.svelte    CodeMirror 6 호스트
+      QueryTabsBar.svelte   탭바 (인라인 이름 편집)
       ResultGrid.svelte     AG Grid 래퍼
       QueryRunningOverlay.svelte
       ConfirmDialog.svelte
@@ -141,7 +151,7 @@ src/                      Svelte 5 + TS 프론트엔드
 - macOS 위주 — Windows 통합 인증(AD)은 미지원 (SQL Server 인증만)
 - tiberius 가 네이티브 쿼리 cancel 을 지원하지 않아 "취소 = 커넥션 무효화" 패턴 사용. pool 의 `test_on_check_out` 으로 자동 복구
 - 결과 셋은 첫 번째만 표시 (다중 결과셋은 향후 작업)
-- 다중 쿼리 탭 미지원 (향후 작업)
+- 탭/익스플로러 폭은 재시작 시 복원되지만, 열려있던 탭 자체는 복원되지 않음
 
 ## 라이선스
 
