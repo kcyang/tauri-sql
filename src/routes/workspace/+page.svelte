@@ -12,48 +12,55 @@
   import { filesApi } from "$lib/api/files";
   import { sessionStore } from "$lib/stores/session.svelte";
   import { themeStore } from "$lib/stores/theme.svelte";
+  import { queryTabs, isDirty } from "$lib/stores/queryTabs.svelte";
   import { errorMessage } from "$lib/types";
   import QueryEditor from "$lib/components/QueryEditor.svelte";
   import ResultGrid from "$lib/components/ResultGrid.svelte";
   import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
-  import ObjectExplorer from "$lib/components/ObjectExplorer.svelte";
+  import ObjectExplorerPane from "$lib/components/ObjectExplorerPane.svelte";
+  import QueryTabsBar from "$lib/components/QueryTabsBar.svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import QueryRunningOverlay from "$lib/components/QueryRunningOverlay.svelte";
 
-  let sql = $state(
-    "SELECT TOP 100 name, object_id, type_desc, create_date\nFROM sys.objects\nORDER BY create_date DESC;",
-  );
-  // 에디터의 현재 선택 영역 텍스트 (QueryEditor 와 양방향 bind)
-  let selectedSql = $state("");
-  let currentFilePath = $state<string | null>(null);
-  let busy = $state(false);
-  let result = $state<QueryResult | null>(null);
-  let runError = $state<string | null>(null);
+  // 전역 (탭 공유) 설정
   let maxRows = $state(1000);
   let timeoutSec = $state(30);
-  let currentQueryId = $state<string | null>(null);
-  let pendingClassification = $state<SqlClassification | null>(null);
   let sortable = $state(false);
 
-  // 에디터/그리드 높이 분할
+  // 에디터/그리드 높이 분할 (UI 전역)
   let editorHeightPx = $state(220);
   let dragging = $state(false);
 
-  // 전역 단축키 (⌘. 취소, ⌘O 열기, ⌘S 저장)
+  // 탭 닫기 확인 다이얼로그
+  let pendingCloseId = $state<string | null>(null);
+
+  // 활성 탭 — 항상 존재해야 함 (onMount 에서 init)
+  const active = $derived(queryTabs.active);
+  const hasSelection = $derived(
+    !!active && active.selectedSql.trim().length > 0,
+  );
+
   function onKeyDown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
+    const key = e.key.toLowerCase();
     if (e.key === ".") {
-      if (currentQueryId) {
+      if (active?.currentQueryId) {
         e.preventDefault();
         onCancelPressed();
       }
-    } else if (e.key.toLowerCase() === "o") {
+    } else if (key === "o") {
       e.preventDefault();
       openFile();
-    } else if (e.key.toLowerCase() === "s") {
+    } else if (key === "s") {
       e.preventDefault();
-      saveFile(e.shiftKey); // Shift 누르면 다른 이름으로 저장
+      saveFile(e.shiftKey);
+    } else if (key === "t") {
+      e.preventDefault();
+      queryTabs.addTab();
+    } else if (key === "w") {
+      e.preventDefault();
+      if (active) requestCloseTab(active.id);
     }
   }
 
@@ -78,7 +85,9 @@
   onMount(() => {
     if (!sessionStore.current) {
       goto("/");
+      return;
     }
+    queryTabs.init();
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   });
@@ -96,71 +105,77 @@
     goto("/");
   }
 
-  /** 실행 시점에 보낼 SQL — 선택 영역이 있으면 그 부분만, 없으면 전체 */
-  function getSqlToRun(): string {
-    const sel = selectedSql.trim();
-    return sel ? selectedSql : sql;
+  function getSqlToRun(t: { sql: string; selectedSql: string }): string {
+    const sel = t.selectedSql.trim();
+    return sel ? t.selectedSql : t.sql;
   }
-
-  const hasSelection = $derived(selectedSql.trim().length > 0);
 
   async function onRunPressed() {
     if (!sessionStore.current) {
-      runError = "세션이 없습니다.";
+      if (active) queryTabs.updateTab(active.id, { runError: "세션이 없습니다." });
       return;
     }
-    const target = getSqlToRun();
+    if (!active) return;
+    const tabId = active.id;
+    const target = getSqlToRun(active);
     if (!target.trim()) {
-      runError = "SQL 이 비어 있습니다.";
+      queryTabs.updateTab(tabId, { runError: "SQL 이 비어 있습니다." });
       return;
     }
-    runError = null;
+    queryTabs.updateTab(tabId, { runError: null });
     try {
       const cls = await queryApi.classify(target);
       if (cls.kind === "empty") {
-        runError = "SQL 이 비어 있습니다.";
+        queryTabs.updateTab(tabId, { runError: "SQL 이 비어 있습니다." });
         return;
       }
       if (cls.kind === "write" || cls.kind === "ddl" || cls.kind === "unknown") {
-        pendingClassification = cls;
+        queryTabs.updateTab(tabId, { pendingClassification: cls });
         return;
       }
-      await actuallyRun();
+      await actuallyRun(tabId);
     } catch (e) {
-      runError = errorMessage(e);
+      queryTabs.updateTab(tabId, { runError: errorMessage(e) });
     }
   }
 
-  async function actuallyRun() {
-    pendingClassification = null;
+  async function actuallyRun(tabId: string) {
+    queryTabs.updateTab(tabId, { pendingClassification: null });
     const s = sessionStore.current;
     if (!s) return;
-    const target = getSqlToRun();
+    const t = queryTabs.tabs.find((x) => x.id === tabId);
+    if (!t) return;
+    const target = getSqlToRun(t);
     const queryId = uuidv4();
-    currentQueryId = queryId;
-    busy = true;
-    runError = null;
-    result = null;
+    queryTabs.updateTab(tabId, {
+      currentQueryId: queryId,
+      busy: true,
+      runError: null,
+      result: null,
+    });
     try {
-      result = await queryApi.execute({
+      const result = await queryApi.execute({
         session_id: s.sessionId,
         sql: target,
         query_id: queryId,
         max_rows: maxRows,
         timeout_ms: timeoutSec * 1000,
       });
+      queryTabs.updateTab(tabId, { result, busy: false, currentQueryId: null });
     } catch (e) {
-      runError = errorMessage(e);
-    } finally {
-      busy = false;
-      currentQueryId = null;
+      queryTabs.updateTab(tabId, {
+        runError: errorMessage(e),
+        busy: false,
+        currentQueryId: null,
+      });
     }
   }
 
   async function onCancelPressed() {
-    if (!currentQueryId) return;
+    const qid = active?.currentQueryId;
+    if (!qid) return;
     try {
-      await queryApi.cancel(currentQueryId);
+      await queryApi.cancel(qid);
     } catch (e) {
       console.warn("cancel_query 실패:", e);
     }
@@ -170,59 +185,109 @@
     const escapedDb = database.replace(/]/g, "]]");
     const escapedSchema = obj.schema.replace(/]/g, "]]");
     const escapedName = obj.name.replace(/]/g, "]]");
-    if (kind === "procedure") {
-      sql = `EXEC [${escapedDb}].[${escapedSchema}].[${escapedName}];\n`;
-    } else {
-      sql = `SELECT TOP 100 *\nFROM [${escapedDb}].[${escapedSchema}].[${escapedName}];\n`;
-    }
+    const next =
+      kind === "procedure"
+        ? `EXEC [${escapedDb}].[${escapedSchema}].[${escapedName}];\n`
+        : `SELECT TOP 100 *\nFROM [${escapedDb}].[${escapedSchema}].[${escapedName}];\n`;
+    if (!active) return;
+    queryTabs.updateTab(active.id, { sql: next });
   }
 
   async function openFile() {
     try {
       const file = await filesApi.openSqlFile();
-      if (file) {
-        sql = file.content;
-        currentFilePath = file.path;
-        runError = null;
+      if (!file) return;
+      // 활성 탭이 빈 드래프트면 재사용, 아니면 새 탭으로
+      const a = queryTabs.active;
+      const reuse = a && a.filePath === null && a.sql === "";
+      if (reuse && a) {
+        queryTabs.updateTab(a.id, {
+          sql: file.content,
+          filePath: file.path,
+          savedContent: file.content,
+          title: basename(file.path),
+          runError: null,
+          result: null,
+        });
+      } else {
+        queryTabs.addTab({
+          sql: file.content,
+          filePath: file.path,
+          title: basename(file.path),
+        });
       }
     } catch (e) {
-      runError = `파일 열기 실패: ${errorMessage(e)}`;
+      if (active)
+        queryTabs.updateTab(active.id, {
+          runError: `파일 열기 실패: ${errorMessage(e)}`,
+        });
     }
+  }
+
+  function basename(p: string): string {
+    return p.split(/[\\/]/).pop() ?? p;
   }
 
   async function saveFile(saveAs: boolean) {
+    if (!active) return;
+    const tabId = active.id;
     try {
-      // saveAs 가 false 이고 이미 경로가 있으면 그 경로로 바로 저장
-      if (!saveAs && currentFilePath) {
+      if (!saveAs && active.filePath) {
         const { invoke } = await import("$lib/api/invoke");
         await invoke<void>("write_text_file", {
-          path: currentFilePath,
-          content: sql,
+          path: active.filePath,
+          content: active.sql,
         });
+        queryTabs.updateTab(tabId, { savedContent: active.sql });
         return;
       }
-      const newPath = await filesApi.saveSqlFile(sql, currentFilePath ?? undefined);
-      if (newPath) currentFilePath = newPath;
+      const newPath = await filesApi.saveSqlFile(
+        active.sql,
+        active.filePath ?? undefined,
+      );
+      if (newPath) {
+        queryTabs.updateTab(tabId, {
+          filePath: newPath,
+          savedContent: active.sql,
+          title: basename(newPath),
+        });
+      }
     } catch (e) {
-      runError = `파일 저장 실패: ${errorMessage(e)}`;
+      queryTabs.updateTab(tabId, {
+        runError: `파일 저장 실패: ${errorMessage(e)}`,
+      });
     }
   }
 
-  let exporting = $state(false);
-
   async function exportToExcel() {
-    if (!result) return;
-    exporting = true;
+    if (!active || !active.result) return;
+    const tabId = active.id;
+    queryTabs.updateTab(tabId, { exporting: true });
     try {
-      const path = await filesApi.exportResultToXlsx(result);
-      if (path) {
-        // 성공 토스트 대용 — 상태 영역에 잠깐 표시
-        runError = null;
-      }
+      await filesApi.exportResultToXlsx(active.result);
+      queryTabs.updateTab(tabId, { runError: null });
     } catch (e) {
-      runError = `Excel 저장 실패: ${errorMessage(e)}`;
+      queryTabs.updateTab(tabId, {
+        runError: `Excel 저장 실패: ${errorMessage(e)}`,
+      });
     } finally {
-      exporting = false;
+      queryTabs.updateTab(tabId, { exporting: false });
+    }
+  }
+
+  function requestCloseTab(id: string) {
+    const { needsConfirm } = queryTabs.closeTab(id);
+    if (needsConfirm) {
+      pendingCloseId = id;
+    } else {
+      queryTabs.forceCloseTab(id);
+    }
+  }
+
+  function confirmCloseTab() {
+    if (pendingCloseId) {
+      queryTabs.forceCloseTab(pendingCloseId);
+      pendingCloseId = null;
     }
   }
 
@@ -250,21 +315,39 @@
         return "실행할까요?";
     }
   }
+
+  // QueryEditor onChange — 활성 탭의 sql 만 갱신
+  function onEditorChange(v: string) {
+    if (active) queryTabs.updateTab(active.id, { sql: v });
+  }
+
+  // QueryEditor selection 변경 — 활성 탭의 selectedSql 갱신
+  function onEditorSelectionChange(text: string) {
+    if (active && active.selectedSql !== text) {
+      queryTabs.updateTab(active.id, { selectedSql: text });
+    }
+  }
 </script>
 
 <div class="flex-1 flex flex-col bg-slate-50 dark:bg-slate-950 h-full">
-  <header class="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+  <header
+    class="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between"
+  >
     <div class="text-sm min-w-0 flex items-center gap-2">
       <span class="font-medium text-slate-900 dark:text-slate-100">
         {sessionStore.current?.profile.name ?? "—"}
       </span>
       <span class="text-slate-500 dark:text-slate-400 truncate">
-        {sessionStore.current?.profile.username}@{sessionStore.current?.profile.host}:{sessionStore.current?.profile.port}
-        / {sessionStore.current?.profile.database}
+        {sessionStore.current?.profile.username}@{sessionStore.current?.profile
+          .host}:{sessionStore.current?.profile.port} / {sessionStore.current
+          ?.profile.database}
       </span>
-      {#if currentFilePath}
-        <span class="text-xs text-slate-400 dark:text-slate-500 truncate" title={currentFilePath}>
-          📄 {currentFilePath.split("/").pop()}
+      {#if active?.filePath}
+        <span
+          class="text-xs text-slate-400 dark:text-slate-500 truncate"
+          title={active.filePath}
+        >
+          📄 {basename(active.filePath)}
         </span>
       {/if}
     </div>
@@ -280,18 +363,23 @@
   </header>
 
   <main class="flex-1 flex overflow-hidden">
-    <aside class="w-64 flex-shrink-0 overflow-hidden">
-      {#if sessionStore.current}
-        <ObjectExplorer
-          sessionId={sessionStore.current.sessionId}
-          {onObjectActivate}
-        />
-      {/if}
-    </aside>
+    {#if sessionStore.current}
+      <ObjectExplorerPane
+        sessionId={sessionStore.current.sessionId}
+        {onObjectActivate}
+      />
+    {/if}
 
-    <section class="flex-1 flex flex-col overflow-hidden">
-      <div class="px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 flex-wrap">
-        {#if busy}
+    <section class="flex-1 flex flex-col overflow-hidden min-w-0">
+      <QueryTabsBar
+        onRequestClose={requestCloseTab}
+        onAddTab={() => queryTabs.addTab()}
+      />
+
+      <div
+        class="px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 flex-wrap"
+      >
+        {#if active?.busy}
           <button
             class="px-4 py-1.5 text-sm rounded-md bg-rose-600 text-white hover:bg-rose-500"
             onclick={onCancelPressed}
@@ -329,14 +417,16 @@
           class="px-2.5 py-1.5 text-sm rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
           title="결과를 Excel(.xlsx) 로 저장"
           onclick={exportToExcel}
-          disabled={!result || exporting}
+          disabled={!active?.result || active?.exporting}
         >
-          📊 {exporting ? "내보내는 중…" : "Excel 저장"}
+          📊 {active?.exporting ? "내보내는 중…" : "Excel 저장"}
         </button>
 
         <span class="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></span>
 
-        <label class="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+        <label
+          class="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2"
+        >
           최대 행
           <select
             bind:value={maxRows}
@@ -348,7 +438,9 @@
             <option value={100000}>100,000</option>
           </select>
         </label>
-        <label class="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+        <label
+          class="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2"
+        >
           타임아웃
           <select
             bind:value={timeoutSec}
@@ -361,38 +453,53 @@
             <option value={3600}>1시간</option>
           </select>
         </label>
-        <label class="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+        <label
+          class="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1.5"
+        >
           <input type="checkbox" bind:checked={sortable} />
           정렬 허용
         </label>
 
         <div class="flex-1"></div>
 
-        {#if result}
+        {#if active?.result}
           <span class="text-sm text-slate-500 dark:text-slate-400">
-            {result.row_count}행 · {result.elapsed_ms}ms
-            {#if result.truncated}<span class="text-amber-600 dark:text-amber-400 ml-1">· 잘림</span>{/if}
+            {active.result.row_count}행 · {active.result.elapsed_ms}ms
+            {#if active.result.truncated}
+              <span class="text-amber-600 dark:text-amber-400 ml-1"
+                >· 잘림</span
+              >
+            {/if}
           </span>
         {/if}
-        {#if runError}
-          <span class="text-sm text-rose-700 dark:text-rose-300 truncate max-w-[40%]" title={runError}>
-            에러: {runError}
+        {#if active?.runError}
+          <span
+            class="text-sm text-rose-700 dark:text-rose-300 truncate max-w-[40%]"
+            title={active.runError}
+          >
+            에러: {active.runError}
           </span>
         {/if}
       </div>
 
       <div class="flex flex-col flex-1 min-h-0">
-        <div style="height: {editorHeightPx}px" class="min-h-[5rem] overflow-hidden">
-          <QueryEditor
-            value={sql}
-            dark={themeStore.isDark}
-            bind:selectedText={selectedSql}
-            onChange={(v) => (sql = v)}
-            onRun={onRunPressed}
-          />
+        <div
+          style="height: {editorHeightPx}px"
+          class="min-h-[5rem] overflow-hidden"
+        >
+          {#if active}
+            {#key active.id}
+              <QueryEditor
+                value={active.sql}
+                dark={themeStore.isDark}
+                onChange={onEditorChange}
+                onSelectionChange={onEditorSelectionChange}
+                onRun={onRunPressed}
+              />
+            {/key}
+          {/if}
         </div>
 
-        <!-- 드래그 핸들 -->
         <button
           type="button"
           aria-label="에디터/결과 높이 조절"
@@ -402,24 +509,44 @@
         ></button>
 
         <div class="flex-1 min-h-0 relative">
-          <ResultGrid {result} {sortable} dark={themeStore.isDark} />
-          <QueryRunningOverlay show={busy} onCancel={onCancelPressed} />
+          <ResultGrid
+            result={active?.result ?? null}
+            {sortable}
+            dark={themeStore.isDark}
+          />
+          <QueryRunningOverlay
+            show={!!active?.busy}
+            onCancel={onCancelPressed}
+          />
         </div>
       </div>
     </section>
   </main>
 </div>
 
-{#if pendingClassification}
+{#if active?.pendingClassification}
   <ConfirmDialog
-    title={confirmDialogTitle(pendingClassification)}
-    message={confirmDialogMessage(pendingClassification)}
-    detail={pendingClassification.keywords.length > 0
-      ? `감지된 키워드: ${pendingClassification.keywords.join(", ")}`
+    title={confirmDialogTitle(active.pendingClassification)}
+    message={confirmDialogMessage(active.pendingClassification)}
+    detail={active.pendingClassification.keywords.length > 0
+      ? `감지된 키워드: ${active.pendingClassification.keywords.join(", ")}`
       : null}
     confirmLabel="실행"
-    danger={pendingClassification.kind === "ddl"}
-    onConfirm={actuallyRun}
-    onCancel={() => (pendingClassification = null)}
+    danger={active.pendingClassification.kind === "ddl"}
+    onConfirm={() => active && actuallyRun(active.id)}
+    onCancel={() =>
+      active && queryTabs.updateTab(active.id, { pendingClassification: null })}
+  />
+{/if}
+
+{#if pendingCloseId}
+  <ConfirmDialog
+    title="탭 닫기"
+    message="이 탭의 변경 사항이 저장되지 않았습니다. 닫을까요?"
+    detail={null}
+    confirmLabel="닫기"
+    danger={true}
+    onConfirm={confirmCloseTab}
+    onCancel={() => (pendingCloseId = null)}
   />
 {/if}
